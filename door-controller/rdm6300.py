@@ -3,6 +3,8 @@
 import rfid_base
 import sys
 
+RateLimitTagEvents = rfid_base.RateLimitTagEvents
+
 # Read tag transmissions from an RDM6300 via serial port, validate the CRC,
 # convert tag ID to integer, and invoke a handler for each tag transmission.
 class RDM6300Reader(rfid_base.RFIDReader):

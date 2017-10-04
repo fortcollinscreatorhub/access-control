@@ -45,15 +45,8 @@ except:
         def output(klass, gpio, value):
             pass
 
-class DelayedActionThread(threading.Thread):
-    def __init__(self, time, action):
-        super(DelayedActionThread, self).__init__()
-        self.time = time
-        self.action = action
-
-    def run(self):
-        time.sleep(self.time)
-        self.action()
+def to_bool(s):
+    return s.lower() in ['true', 'yes', 'on', '1']
 
 class RfidReaderThread(threading.Thread):
     def __init__(self, config):
@@ -65,9 +58,10 @@ class RfidReaderThread(threading.Thread):
         self.auth_port = int(config['conf']['auth_port'])
         self.acl = config['conf']['acl']
         self.gpio = int(config['conf']['gpio'])
+        self.allow_retrigger = to_bool(config['conf']['allow_retrigger'])
         self.unlock_period = int(config['conf']['unlock_period'])
 
-        self.relock_thread = None
+        self.relock_timer = None
         self.sw_state_lock = threading.Lock()
 
     def run(self):
@@ -93,14 +87,37 @@ class RfidReaderThread(threading.Thread):
 
     def handle_tag(self, tag, rcv_start_time):
         print_with_timestamp('Tag: ' + repr(tag))
+
+        if not self.validate_tag(tag):
+            print_with_timestamp('Ignore; tag not authorized')
+            return
+
+        previously_running_timer = None
         with self.sw_state_lock:
-            if self.relock_thread:
+            if self.relock_timer:
+                # We can't use self.relock_timer without sw_state_lock held,
+                # since the timer callback could run and clear
+                # self.relock_timer.
+                previously_running_timer = self.relock_timer
+
+        if previously_running_timer:
+            if not self.allow_retrigger:
                 print_with_timestamp('Ignore; door unlocked')
-            elif not self.validate_tag(tag):
-                print_with_timestamp('Ignore; tag not authorized')
-            else:
-                self.schedule_unlock()
-                self.unlock_door()
+                return
+            print_with_timestamp('Restarting lock timer')
+            previously_running_timer.cancel()
+            # The following join() must happen without sw_state_lock held,
+            # since the timer callback can hold that lock, and if we hold it,
+            # join() might deadlock waiting for the timer callback to complete,
+            # yet it can't complete since we hold the lock.
+            previously_running_timer.join()
+            self.relock_timer = None
+
+        with self.sw_state_lock:
+            self.unlock_door()
+            self.relock_timer = threading.Timer(self.unlock_period,
+                self.do_scheduled_unlock)
+            self.relock_timer.start()
 
     def handle_data_outside_tag(self, data):
         pass
@@ -130,14 +147,9 @@ class RfidReaderThread(threading.Thread):
             pass
         return False
 
-    def schedule_unlock(self):
-        self.relock_thread = DelayedActionThread(self.unlock_period,
-            self.do_scheduled_unlock)
-        self.relock_thread.start()
-
     def do_scheduled_unlock(self):
         with self.sw_state_lock:
-            self.relock_thread = None
+            self.relock_timer = None
             self.lock_door()
 
     def unlock_door(self):

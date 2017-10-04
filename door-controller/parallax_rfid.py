@@ -3,6 +3,8 @@
 import rfid_base
 import sys
 
+RateLimitTagEvents = rfid_base.RateLimitTagEvents
+
 # Read tag transmissions from a Parallax RFID reader via serial port,
 # convert tag ID to integer, and invoke a handler for each tag transmission.
 class ParallaxRfidReader(rfid_base.RFIDReader):
