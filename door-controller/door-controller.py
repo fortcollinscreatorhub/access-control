@@ -5,8 +5,11 @@ try:
     import configparser
 except:
     import ConfigParser as configparser
+import itertools
 import os
+import socket
 import sys
+import queue
 import threading
 import time
 import traceback
@@ -35,40 +38,164 @@ except:
 
         @classmethod
         def setmode(klass, mode):
-            pass
+            print_with_timestamp("GPIO-debug: GPIO.setmode(%s)" % repr(mode))
 
         @classmethod
         def setup(klass, gpio, direction):
-            pass
+            print_with_timestamp("GPIO-debug: GPIO.setup(%s, %s)" % (repr(gpio), repr(direction)))
 
         @classmethod
         def output(klass, gpio, value):
-            pass
+            print_with_timestamp("GPIO-debug: GPIO.output(%s, %s)" % (repr(gpio), repr(value)))
 
-def to_bool(s):
-    return s.lower() in ['true', 'yes', 'on', '1']
+class SleepStep(object):
+    args_conversions = (int,)
+
+    def __init__(self, delay):
+        self.delay = delay
+
+    def __str__(self):
+        return 'sleep,' + str(self.delay)
+
+    def __repr__(self):
+        return self.__str__()
+
+class GpioSetupOutStep(object):
+    args_conversions = (int,)
+
+    def __init__(self, gpio):
+        self.gpio = gpio
+
+    def __call__(self):
+        GPIO.setup(self.gpio, GPIO.OUT)
+
+    def __str__(self):
+        return 'gpio.setup.out,%d' % self.gpio
+
+    def __repr__(self):
+        return self.__str__()
+
+class GpioOutStep(object):
+    args_conversions = (int, int)
+
+    def __init__(self, gpio, val):
+        self.gpio = gpio
+        self.val = val
+
+    def __call__(self):
+        GPIO.output(self.gpio, self.val)
+
+    def __str__(self):
+        return 'gpio.out,%d,%d' % (self.gpio, self.val)
+
+    def __repr__(self):
+        return self.__str__()
+
+class LogStep(object):
+    args_conversions = (str,)
+
+    def __init__(self, message):
+        self.message = message
+
+    def __call__(self):
+        print_with_timestamp('LogStep: ' + self.message)
+
+    def __str__(self):
+        return 'log,%s' % self.message
+
+    def __repr__(self):
+        return self.__str__()
+
+actions = {
+    'sleep': SleepStep,
+    'gpio.setup.out': GpioSetupOutStep,
+    'gpio.out': GpioOutStep,
+    'log': LogStep,
+}
+
+def parse_sequence(conf_section, seqname):
+    sequence = []
+    for step_id in itertools.count():
+        key = seqname + '.' + str(step_id)
+        if key not in conf_section:
+            break
+        action_str = conf_section[key]
+        (action_name, *action_args) = action_str.split(',')
+        if action_name not in actions:
+            raise Exception('Invalid action in %s' % key)
+        action_constructor = actions[action_name]
+        args_conversions = action_constructor.args_conversions
+        expected_arg_count = len(args_conversions)
+        actual_arg_count = len(action_args)
+        if actual_arg_count != expected_arg_count:
+            raise Exception('Invalid argument count %d in %s' % (actual_arg_count, key))
+        try:
+            action_args_converted = map(lambda f, x: f(x), args_conversions, action_args)
+        except:
+            raise Exception('Invalid arguments in %s' % key)
+        sequence.append(action_constructor(*action_args_converted))
+    return sequence
+
+class SequenceTimer(object):
+    def __init__(self, sequence, notifier):
+        self.sequence = sequence
+        self.notifier = notifier
+
+        self.queue = queue.Queue()
+        self.thread = threading.Thread(target=self.threadfunc)
+
+    def start(self):
+        self.thread.start()
+
+    def join(self):
+        self.thread.join()
+
+    def cancel(self):
+        self.queue.put(None)
+        self.thread.join()
+
+    def threadfunc(self):
+        try:
+            delay=0
+            for action in self.sequence:
+                try:
+                    self.queue.get(timeout=delay)
+                except queue.Empty as e:
+                    if isinstance(action, SleepStep):
+                        delay = action.delay
+                    else:
+                        delay = 0
+                        action()
+                else:
+                    break
+        finally:
+            if self.notifier:
+                self.notifier.sequence_complete(self)
 
 class RfidReaderThread(threading.Thread):
-    def __init__(self, config):
+    def __init__(self, conf_section):
         super(RfidReaderThread, self).__init__()
 
-        self.reader_type = config['conf']['reader_type']
-        self.serial_port = config['conf']['serial_port']
-        self.auth_host = config['conf']['auth_host']
-        self.auth_port = int(config['conf']['auth_port'])
-        self.acl = config['conf']['acl']
-        self.gpio = int(config['conf']['gpio'])
-        self.allow_retrigger = to_bool(config['conf']['allow_retrigger'])
-        self.unlock_period = int(config['conf']['unlock_period'])
+        self.reader_type = conf_section['reader_type']
+        self.serial_port = conf_section['serial_port']
+        self.auth_host = conf_section['auth_host']
+        self.auth_port = int(conf_section['auth_port'])
+        self.acl = conf_section['acl']
+        self.restart_action = conf_section.getboolean('restart_action')
+        self.init_seq = parse_sequence(conf_section, 'init')
+        self.triggered_seq = parse_sequence(conf_section, 'triggered')
 
-        self.relock_timer = None
+        self.seq_timer = None
         self.sw_state_lock = threading.Lock()
 
     def run(self):
         try:
             GPIO.setmode(GPIO.BOARD)
-            GPIO.setup(self.gpio, GPIO.OUT)
-            self.lock_door()
+            print_with_timestamp('Running init sequence')
+            st = SequenceTimer(self.init_seq, None)
+            st.start()
+            st.join()
+            print_with_timestamp('Completed init sequence')
             if self.reader_type == 'rdm6300':
                 import rdm6300
                 rlte = rdm6300.RateLimitTagEvents(self)
@@ -94,30 +221,32 @@ class RfidReaderThread(threading.Thread):
 
         previously_running_timer = None
         with self.sw_state_lock:
-            if self.relock_timer:
-                # We can't use self.relock_timer without sw_state_lock held,
-                # since the timer callback could run and clear
-                # self.relock_timer.
-                previously_running_timer = self.relock_timer
+            # We can't use self.seq_timer without sw_state_lock held,
+            # since the timer callback could run and clear
+            # self.seq_timer.
+            previously_running_timer = self.seq_timer
+            if previously_running_timer and not self.restart_action:
+                print_with_timestamp('Ignore; triggered sequence is running')
+                return
 
         if previously_running_timer:
-            if not self.allow_retrigger:
-                print_with_timestamp('Ignore; door unlocked')
-                return
-            print_with_timestamp('Restarting lock timer')
+            print_with_timestamp('Restarting triggered sequence')
             previously_running_timer.cancel()
             # The following join() must happen without sw_state_lock held,
             # since the timer callback can hold that lock, and if we hold it,
             # join() might deadlock waiting for the timer callback to complete,
             # yet it can't complete since we hold the lock.
             previously_running_timer.join()
-            self.relock_timer = None
+            self.seq_timer = None
 
         with self.sw_state_lock:
-            self.unlock_door()
-            self.relock_timer = threading.Timer(self.unlock_period,
-                self.do_scheduled_unlock)
-            self.relock_timer.start()
+            self.seq_timer = SequenceTimer(self.triggered_seq, self)
+            self.seq_timer.start()
+
+    def sequence_complete(self, seq_timer):
+        with self.sw_state_lock:
+            if self.seq_timer == seq_timer:
+                self.seq_timer = None
 
     def handle_data_outside_tag(self, data):
         pass
@@ -147,21 +276,23 @@ class RfidReaderThread(threading.Thread):
             pass
         return False
 
-    def do_scheduled_unlock(self):
-        with self.sw_state_lock:
-            self.relock_timer = None
-            self.lock_door()
-
-    def unlock_door(self):
-        print_with_timestamp('Unlocking door')
-        GPIO.output(self.gpio, GPIO.HIGH)
-
-    def lock_door(self):
-        print_with_timestamp('Locking door')
-        GPIO.output(self.gpio, GPIO.LOW)
-
-config = configparser.ConfigParser()
+config = configparser.ConfigParser(inline_comment_prefixes=('#'))
 config.read(etc_dir + '/door-controller.ini')
-rfid_reader_thread = RfidReaderThread(config)
+# FIXME: To enable multiple device controllers on one host, take a cmdline arg
+# naming the device this process should handle, and add that device name into
+# each entry in sec_names. Or, search for all section names with our hostname,
+# and start a thread for each.
+sec_names = [
+    'conf.' + socket.gethostname(),
+    'conf'
+]
+sec = None
+for sec_name in sec_names:
+    if sec_name in config:
+        sec = config[sec_name]
+        break
+if sec is None:
+    raise Exception('No valid section found in configuration file')
+rfid_reader_thread = RfidReaderThread(sec)
 rfid_reader_thread.start()
 rfid_reader_thread.join()
