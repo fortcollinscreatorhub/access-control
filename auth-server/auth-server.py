@@ -14,6 +14,7 @@ acl_dir = os.path.join(app_dir, 'var', 'acls')
 acl_fn_prefix = 'acl-'
 log_dir = os.path.join(app_dir, 'var', 'log')
 access_log_fn_template = os.path.join(log_dir, 'access-%Y-%m.log')
+access_log_ts_template = '%Y%m%dT%H%M%S.'
 acl_update_log_fn = os.path.join(log_dir, 'acl-update.log')
 
 re_acl_name = re.compile('^[a-z0-9_.-]+$')
@@ -56,6 +57,19 @@ def update_acls_poll():
 
 def access_log_fn():
     return time.strftime(access_log_fn_template)
+
+last_ts = None
+ts_seq_num = 0
+def gen_ts():
+    global ts_seq_num
+    global last_ts
+    ts = time.strftime(access_log_ts_template)
+    if ts == last_ts:
+        ts_seq_num += 1
+    else:
+        ts_seq_num = 0
+    last_ts = ts
+    return ts + str(ts_seq_num)
 
 app = flask.Flask(__name__)
 
@@ -100,13 +114,13 @@ def api_check_access_0(acl, rfid):
                 result = True
                 break
     with open(access_log_fn(), 'at+') as f:
-        print('check,%s,%s,%s' % (acl, rfid, repr(result)), file=f)
+        print('%s,check,%s,%s,%s' % (gen_ts(), acl, rfid, repr(result)), file=f)
     return flask.Response(repr(result), mimetype='text/plain')
 
 @app.route('/api/log-remote-access-check-0/<acl>/<rfid>/<result>')
 def api_log_remote_access_check_0(acl, rfid, result):
     with open(access_log_fn(), 'at+') as f:
-        print('check,%s,%s,%s' % (acl, rfid, result), file=f)
+        print('%s,check,%s,%s,%s' % (gen_ts(), acl, rfid, result), file=f)
 
 @app.route('/api/get-acl-0/<acl>')
 def api_get_acl_0(acl):
