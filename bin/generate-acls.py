@@ -4,6 +4,7 @@ import argparse
 from filelock import FileLock
 import httplib2
 import os
+import time
 
 from apiclient import discovery
 from oauth2client import client
@@ -52,7 +53,7 @@ def get_credentials(flags):
         print('Storing credentials to ' + credential_path)
     return credentials
 
-def download_google_sheet(flags, debug, acl_dir):
+def download_google_sheet(flags, debug, acl_dir, ts):
     credentials = get_credentials(flags)
     http = credentials.authorize(httplib2.Http())
     discoveryUrl = \
@@ -115,6 +116,7 @@ def download_google_sheet(flags, debug, acl_dir):
         fname_tmp = '.' + fname + '.tmp'
         fpath_tmp = os.path.join(acl_dir, fname_tmp)
         with open(fpath_tmp, 'wt') as f:
+            print('# Generated at', ts, file=f)
             for rfid in sorted(acl_content[acl]):
                 print(rfid, file=f)
         os.rename(fpath_tmp, fpath)
@@ -126,6 +128,7 @@ def download_google_sheet(flags, debug, acl_dir):
         os.unlink(fpath)
 
 if __name__ == '__main__':
+    ts = time.strftime('%Y%m%dT%H%M%S')
     parser = argparse.ArgumentParser(
         parents=[tools.argparser],
         description='Download Access Control info from Google Sheet')
@@ -146,5 +149,5 @@ if __name__ == '__main__':
             parser.error('output_dir required if --auth-only not specified')
         lock_fn = os.path.join(args.output_dir, ".lock")
         with FileLock(lock_fn):
-            download_google_sheet(args, args.debug, args.output_dir)
-        print('RFID lists generated OK')
+            download_google_sheet(args, args.debug, args.output_dir, ts)
+        print('RFID lists generated OK at', ts)
