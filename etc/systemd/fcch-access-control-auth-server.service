@@ -4,7 +4,7 @@ Requires=network.target
 
 [Service]
 Type=simple
-ExecStart=/home/swarren/git_wa/fcch-access-control/bin/auth-server.sh
+ExecStart=/opt/fcch-access-control/bin/auth-server.sh
 Restart=always
 User=fcchaccess
 Group=fcchaccess
