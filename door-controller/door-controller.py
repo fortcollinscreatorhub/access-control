@@ -183,7 +183,8 @@ class RfidReaderThread(threading.Thread):
         self.acl = conf_section['acl']
         self.restart_action = conf_section.getboolean('restart_action')
         self.init_seq = parse_sequence(conf_section, 'init')
-        self.triggered_seq = parse_sequence(conf_section, 'triggered')
+        self.authorized_seq = parse_sequence(conf_section, 'authorized')
+        self.unauthorized_seq = parse_sequence(conf_section, 'unauthorized')
 
         self.seq_timer = None
         self.sw_state_lock = threading.Lock()
@@ -215,9 +216,11 @@ class RfidReaderThread(threading.Thread):
     def handle_tag(self, tag, rcv_start_time):
         print_with_timestamp('Tag: ' + repr(tag))
 
-        if not self.validate_tag(tag):
-            print_with_timestamp('Ignore; tag not authorized')
-            return
+        authorized = self.validate_tag(tag)
+        if authorized:
+            print_with_timestamp('Tag authorized')
+        else:
+            print_with_timestamp('Tag NOT authorized')
 
         previously_running_timer = None
         with self.sw_state_lock:
@@ -225,12 +228,14 @@ class RfidReaderThread(threading.Thread):
             # since the timer callback could run and clear
             # self.seq_timer.
             previously_running_timer = self.seq_timer
-            if previously_running_timer and not self.restart_action:
-                print_with_timestamp('Ignore; triggered sequence is running')
+
+        if previously_running_timer:
+            if not (authorized and self.restart_action):
+                print_with_timestamp('Ignore; previous sequence is running')
                 return
 
         if previously_running_timer:
-            print_with_timestamp('Restarting triggered sequence')
+            print_with_timestamp('Cancelling existing sequence')
             previously_running_timer.cancel()
             # The following join() must happen without sw_state_lock held,
             # since the timer callback can hold that lock, and if we hold it,
@@ -240,7 +245,11 @@ class RfidReaderThread(threading.Thread):
             self.seq_timer = None
 
         with self.sw_state_lock:
-            self.seq_timer = SequenceTimer(self.triggered_seq, self)
+            if authorized:
+                seq = self.authorized_seq
+            else:
+                seq = self.unauthorized_seq
+            self.seq_timer = SequenceTimer(seq, self)
             self.seq_timer.start()
 
     def sequence_complete(self, seq_timer):

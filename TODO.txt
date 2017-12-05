@@ -1,6 +1,4 @@
 - Complete README/instructions (as a .md file)
-- Enhance door controller to run a separate action whenever an unauthorized
-  RFID tag is scanned (e.g. to flash a red LED).
 - Perhaps split out gdocs script into a module and wrapper script:
   - Data download (generic for any doc ID, cell range)
   - Use-case-specific script with all membership-list-processing logic
