@@ -99,8 +99,7 @@ def download_google_sheet(flags, debug, acl_dir, ts):
             if access != 'y':
                 continue
             if debug: print(acl, "yes")
-            for rfid in rfids:
-                acl_content[acl].extend(rfids)
+            acl_content[acl].extend(rfids)
 
     old_files = os.listdir(acl_dir)
 
