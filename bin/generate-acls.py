@@ -85,6 +85,8 @@ def download_google_sheet(flags, debug, acl_dir, ts):
     for row in values[1:]:
         if debug: print()
         if debug: print('Values:', repr(row))
+        if not len(row):
+          continue
         rfids = row[0]
         if debug: print('Raw RFIDs:', repr(rfids))
         rfids = rfids.split(',')
@@ -94,7 +96,10 @@ def download_google_sheet(flags, debug, acl_dir, ts):
         if not rfids:
             continue
         for (i, acl) in enumerate(acls):
-            access = row[1 + i]
+            col = 1 + i
+            if col >= len(row):
+                break
+            access = row[col]
             if debug: print(acl, repr(access))
             if access != 'y':
                 continue
