@@ -6,7 +6,12 @@
 {% endif %}
 </head>
 <body>
-<h1>ACL Update Log</h1>
+<h1>
+ACL Update Log
+{% if running %}
+(CURRENTLY RUNNING; PLEASE WAIT...)
+{% endif %}
+</h1>
 <pre>
 {{content}}
 </pre>

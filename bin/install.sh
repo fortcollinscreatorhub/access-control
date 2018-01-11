@@ -9,7 +9,7 @@ app_dir="$(cd "${script_dir}"/.. && pwd)"
 cd "${app_dir}"
 
 apt -y update
-apt -y install build-essential python3-dev virtualenv
+apt -y install build-essential python3-dev virtualenv postfix mailutils
 
 groupadd --system gpio || true
 
@@ -28,7 +28,7 @@ mkdir -p "${app_dir}/.credentials"
 
 chown -R root:fcchaccess "${app_dir}"
 chmod -R u+rX,u-w,g+rX,g-w,o-rwx "${app_dir}"
-chmod -R ug+w "${app_dir}/.credentials" "${app_dir}/var/acls" "${app_dir}/var/log"
+chmod -R ug+w "${app_dir}/.credentials" "${app_dir}/var"
 
 su -c "\"${app_dir}/bin/generate-acls.sh\" --auth-only" fcchaccess
 set +x
