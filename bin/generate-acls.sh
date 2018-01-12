@@ -6,6 +6,12 @@ app_dir="$(cd "${script_dir}"/.. && pwd)"
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
+. "${app_dir}/venv/bin/activate"
+
+if [[ "$1" == -* ]]; then
+  exec python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "$@"
+fi
+
 if [ "${GEN_ACLS_MAIL_WRAP}" == "" ]; then
   acl_report="${app_dir}/var/log/acl-report.log"
   GEN_ACLS_MAIL_WRAP=1 "$0" "$@" > "${acl_report}" 2>&1
@@ -22,7 +28,6 @@ mkdir -p "${acl_new_dir}"
 cp -r "${acl_new_dir}" "${acl_orig_dir}"
 
 acl_dl_log="${app_dir}/var/log/acl-download.log"
-. "${app_dir}/venv/bin/activate"
 python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "${acl_new_dir}" > "${acl_dl_log}" 2>&1
 ret=$?
 if [ ${ret} -ne 0 ]; then
