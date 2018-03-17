@@ -1,4 +1,3 @@
-- Complete README/instructions (as a .md file)
 - Perhaps split out gdocs script into a module and wrapper script:
   - Data download (generic for any doc ID, cell range)
   - Use-case-specific script with all membership-list-processing logic

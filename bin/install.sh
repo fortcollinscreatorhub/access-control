@@ -8,9 +8,6 @@ app_dir="$(cd "${script_dir}"/.. && pwd)"
 
 cd "${app_dir}"
 
-apt -y update
-apt -y install build-essential python3-dev virtualenv postfix mailutils
-
 groupadd --system gpio || true
 
 useradd --system --home-dir "${app_dir}" fcchaccess || true
@@ -18,6 +15,7 @@ useradd --system --home-dir "${app_dir}" fcchaccess || true
 # Could be combined with useradd,
 # but doing this separately works for upgrades too
 usermod -a -G gpio fcchaccess || true
+usermod -a -G dialout fcchaccess || true
 
 if [ ! -d venv ]; then
   virtualenv -p python3 venv
@@ -30,14 +28,30 @@ chown -R root:fcchaccess "${app_dir}"
 chmod -R u+rX,u-w,g+rX,g-w,o-rwx "${app_dir}"
 chmod -R ug+w "${app_dir}/.credentials" "${app_dir}/var"
 
-su -c "\"${app_dir}/bin/generate-acls.sh\" --auth-only" fcchaccess
+set +x
+cat <<ENDOFDOC
+
+INSTRUCTIONS:
+
+After you have read these instructions, this install script will attempt to
+authenticate to Google, so that it can use the Google Drive API. The script will
+print a URL that you must open using a web browser on any system with a browser
+that can log into your Google account. The browser will show you a code that
+must be pasted back into the script.
+
+Once you have read these instructions, press enter to continue:
+ENDOFDOC
+read dummy
+set -x
+su -c "\"${app_dir}/bin/generate-acls.sh\" --no-email --auth-only" fcchaccess
+
 set +x
 cat <<ENDOFDOC
 
 INSTRUCTIONS:
 
 1) Open a web browser
-2) Navigate to Google Drive
+2) Navigate to Google Drive (https://drive.google.com/)
 3) Open the folder containing the membership list:
    Fort Collins Creator Hub Public > Board Private > Membership List
 4) Right-click (or Options-click) the "000 Membership List" document
@@ -52,7 +66,7 @@ Once these actions are complete, press enter to continue:
 ENDOFDOC
 read dummy
 set -x
-su -c "\"${app_dir}/bin/generate-acls.sh\" \"${app_dir}/var/acls/\"" fcchaccess
+su -c "\"${app_dir}/bin/generate-acls.sh\" --no-email \"${app_dir}/var/acls/\"" fcchaccess
 
 sed -i -e "/ExecStart/s@=.*/@=${app_dir}/bin/@" "${app_dir}/etc/systemd/"*.service
 
