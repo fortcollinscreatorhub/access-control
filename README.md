@@ -235,6 +235,36 @@ some error occurred, which must be debugged and fixed.
 
     + systemctl start fcch-access-control-door-controller
 
+# Configure log backups
+
+## Create an SSH key
+
+Run the following to create a key. Don't create a passphrase.
+
+    cd /opt/fcch-access-control/
+    install -d /opt/fcch-access-control/.ssh -m 0770 -o root -g fcchaccess
+    ssh-keygen -t rsa -b 4096 -f /opt/fcch-access-control/.ssh/id_rsa
+    chown root:fcchaccess /opt/fcch-access-control/.ssh/id_rsa{,.pub}
+    chmod ug+r /opt/fcch-access-control/.ssh/id_rsa{,.pub}
+
+## Configure the FCCH webserver to accept backups
+
+On the FCCH webserver (fortcon5@fortcollinscreatorhub.org), ensure that the
+Pi's /opt/fcch-access-control/.ssh/id_rsa.pub is part of the web server's
+/home2/fortcon5/.ssh/authorized_keys. The entry should include a force command
+definition, as shown below:
+
+    # HAL (door access control) backups
+    command="rsync --server -re.iLsfxC . /home2/fortcon5/backup-hal-var/" ssh-rsa AAAA...Go0yhn91Q== root@HAL
+
+# Set up cron jobs
+
+    crontab -u fcchaccess /opt/fcch-access-control/backup/var-spool-cron-crontabs-fcchaccess
+
+The crontab includes jobs for:
+- Updating the ACLs each night.
+- Backup up the log files each night.
+
 # Interacting with the web server from an SSH session
 
 Use a text-mode/command-line web browser on the Pi:

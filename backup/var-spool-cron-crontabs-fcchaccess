@@ -26,3 +26,4 @@ MAILTO=sysadmin@fortcollinscreatorhub.org
 
 # m  h dom mon dow command
  11  2   *   *   * wget -O /dev/null 'http://localhost:8080/ui/update-acls' > /dev/null 2>&1
+ 37  2   *   *   * rsync -r /opt/fcch-access-control/var/ fortcon5@fortcollinscreatorhub.org:/home2/fortcon5/backup-hal-var/
