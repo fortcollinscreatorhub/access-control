@@ -1,7 +1,6 @@
 #!/bin/bash
 
-app_name="$0"
-script_dir="$(dirname "${app_name}")"
+script_dir="$(dirname "$0")"
 app_dir="$(cd "${script_dir}"/.. && pwd)"
 
 export LC_ALL=C.UTF-8
@@ -9,23 +8,18 @@ export LANG=C.UTF-8
 
 . "${app_dir}/venv/bin/activate"
 
-# Argument passing is rather hokey...
-if [ "$1" == "--no-email" ]; then
-  GEN_ACLS_MAIL_WRAP=1
-  shift
+if [[ "$1" == -* ]]; then
+  #exec python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "$@"
+  exec python3 "${app_dir}/bin/generate-acls-WA.py" "$@"
 fi
 
 if [ "${GEN_ACLS_MAIL_WRAP}" == "" ]; then
   acl_report="${app_dir}/var/log/acl-report.log"
-  GEN_ACLS_MAIL_WRAP=1 "${app_name}" "$@" > "${acl_report}" 2>&1
+  GEN_ACLS_MAIL_WRAP=1 "$0" "$@" > "${acl_report}" 2>&1
   ret=$?
   mail -s "HAL ACL update log" sysadmin@fortcollinscreatorhub.org < "${acl_report}"
   cat "${acl_report}"
   exit ${ret}
-fi
-
-if [[ "$1" == --auth-only ]]; then
-  exec python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "$@"
 fi
 
 acl_orig_dir="${app_dir}/var/acls-orig"
@@ -35,7 +29,8 @@ mkdir -p "${acl_new_dir}"
 cp -r "${acl_new_dir}" "${acl_orig_dir}"
 
 acl_dl_log="${app_dir}/var/log/acl-download.log"
-python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "${acl_new_dir}" > "${acl_dl_log}" 2>&1
+#python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "${acl_new_dir}" > "${acl_dl_log}" 2>&1
+python3 "${app_dir}/bin/generate-acls.py" "${acl_new_dir}" > "${acl_dl_log}" 2>&1
 ret=$?
 if [ ${ret} -ne 0 ]; then
   echo DOWNLOAD LOG:
