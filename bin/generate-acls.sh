@@ -30,7 +30,7 @@ cp -r "${acl_new_dir}" "${acl_orig_dir}"
 
 acl_dl_log="${app_dir}/var/log/acl-download.log"
 #python3 "${app_dir}/bin/generate-acls.py" --noauth_local_webserver "${acl_new_dir}" > "${acl_dl_log}" 2>&1
-python3 "${app_dir}/bin/generate-acls.py" "${acl_new_dir}" > "${acl_dl_log}" 2>&1
+python3 "${app_dir}/bin/generate-acls-WA.py" "${acl_new_dir}" > "${acl_dl_log}" 2>&1
 ret=$?
 if [ ${ret} -ne 0 ]; then
   echo DOWNLOAD LOG:
