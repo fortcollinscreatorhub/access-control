@@ -1,11 +1,10 @@
-#!/usr/local/bin/bash
+#!/bin/bash
 
 script_dir="$(dirname "$0")"
 app_dir="$(cd "${script_dir}"/.. && pwd)"
 
-export LC_ALL=am_ET.UTF-8
-export LANG=am_ET.UTF-8
-
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
 
 . "${app_dir}/venv/bin/activate"
 
@@ -18,7 +17,7 @@ if [ "${GEN_ACLS_MAIL_WRAP}" == "" ]; then
   acl_report="${app_dir}/var/log/acl-report.log"
   GEN_ACLS_MAIL_WRAP=1 "$0" "$@" > "${acl_report}" 2>&1
   ret=$?
-  mail -s "ACL server update log" sysadmin@fortcollinscreatorhub.org < "${acl_report}"
+  mail -s "HAL ACL update log" sysadmin@fortcollinscreatorhub.org < "${acl_report}"
   cat "${acl_report}"
   exit ${ret}
 fi
